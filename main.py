@@ -1,25 +1,31 @@
+#%%
 import enlighten 
 from random import sample
 
 import torch
 from torch.optim import Adam
 import torch.nn.functional as F
+from torchgan.losses import WassersteinGeneratorLoss as WG
+#from torchgan.losses import WassersteinDiscriminatorLoss as WD
 
 from utils import args, get_buffer, get_batch, plot_losses, plot_examples, make_vid
 from generator import Generator
 from discriminator import Discriminator
-    
-    
+
+
     
 def epoch(test, buffer, batch_size, gen, gen_opt, dis, dis_opt):
     
     if(test): gen.eval() ; dis.eval() 
     else:     gen.train(); dis.train() 
     
+    #wg = WG()
+    
     gen_opt.zero_grad()
     fake_batch = gen.go(batch_size)
     guesses = dis(fake_batch)
     gen_loss = F.binary_cross_entropy(guesses, torch.ones(guesses.shape))
+    #gen_loss = wg(guesses)
     
     if(not test):
         gen_loss.backward()
@@ -114,3 +120,4 @@ def train():
     make_vid()
         
 train()
+# %%

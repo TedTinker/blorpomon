@@ -1,3 +1,4 @@
+#%%
 import torch 
 from torch import nn 
 from torchinfo import summary as torch_summary
@@ -23,36 +24,36 @@ def contracter(in_channels, out_channels):
 
 
 
-conv_size = 64
-
 class Discriminator(nn.Module):
     
     def __init__(self, norm_size = 64, mnist = False):
         super(Discriminator, self).__init__()
         
+        self.conv_size = 64
         self.start_size = args.image_size // 4
                 
         self.image_in = nn.Sequential(
             ConstrainedConv2d(
                 in_channels  = 1 if args.gray else 3, 
-                out_channels = conv_size, 
+                out_channels = self.conv_size, 
                 kernel_size  = 1),
             nn.LeakyReLU(), 
             nn.Dropout(.3))
         
         self.norm_in = nn.Sequential(
             nn.Linear(1, norm_size),
-            nn.LeakyReLU())
+            nn.LeakyReLU(),
+            nn.Dropout(.3))
         
-        self.cnn = nn.Sequential(
-            contracter(conv_size, conv_size),
-            contracter(conv_size, conv_size))
+        self.cnn = nn.ModuleList()
+        for i in range(2):
+            self.cnn.append(contracter(self.conv_size, self.conv_size))
         
         self.pred_out = nn.Sequential(
-            nn.Linear(conv_size * self.start_size * self.start_size + norm_size, conv_size),
+            nn.Linear(self.conv_size * self.start_size * self.start_size + norm_size, self.conv_size),
             nn.LeakyReLU(),
             nn.Dropout(.3),
-            nn.Linear(conv_size, 1),
+            nn.Linear(self.conv_size, 1),
             nn.Tanh())
         
         self.image_in.apply(init_weights)
@@ -70,10 +71,14 @@ class Discriminator(nn.Module):
     def forward(self, image):
         image = image.to(device)
         image = (image.permute(0,3,1,2)*2)-1
+        image += torch.normal(
+            mean = torch.zeros(image.shape),
+            std  = torch.ones( image.shape)*.25).to(device)
+        norm = torch.linalg.norm(torch.clone(image), dim=(1,2,3)).unsqueeze(1)
+        norm = self.norm_in(norm)
         x = self.image_in(image)
-        x = self.cnn(x)
-        norm = torch.linalg.norm(image.detach(), dim=(1,2,3))
-        norm = self.norm_in(norm.unsqueeze(1))
+        for l in self.cnn:
+            x = l(x)
         x = torch.cat([x.flatten(1), norm], dim = 1)
         pred = self.pred_out(x).cpu()
         return((pred+1)/2)
@@ -84,3 +89,5 @@ if __name__ == "__main__":
     
     dis = Discriminator()
     
+
+# %%

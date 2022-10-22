@@ -4,12 +4,12 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--mnist",      type=bool, default = True) 
-parser.add_argument("--gray",       type=bool, default = True) 
+parser.add_argument("--mnist",      type=bool, default = False) 
+parser.add_argument("--gray",       type=bool, default = False) 
 parser.add_argument("--image_size", type=int,  default = 16) 
 
 parser.add_argument("--epochs",     type=int,  default = 10000) 
-parser.add_argument("--batch_size", type=int,  default = 64) 
+parser.add_argument("--batch_size", type=int,  default = 128) 
 parser.add_argument("--testing",    type=int,  default = 25) 
 parser.add_argument("--plotting",   type=int,  default = 250) 
 
@@ -84,12 +84,19 @@ def get_batch(buffer, batch_size):
     batch = torch.clone(buffer[indexes])
     return(batch)
 
+def imshow_shape(image):
+    if(image.shape[-1] == 3): pass 
+    else: image = torch.tile(image, (1, 1, 1, 3))
+    if(len(image.shape) == 3): pass 
+    else: image = image.squeeze(0)
+    return(image)
+
 
             
 if __name__ == "__main__":
     buffer = get_buffer()
-    plt.imshow(buffer[0], cmap = cmap) ; plt.show() ; plt.close() 
-    plt.imshow(buffer[1], cmap = cmap) ; plt.show() ; plt.close() 
+    plt.imshow(imshow_shape(buffer[0]), cmap = cmap) ; plt.show() ; plt.close() 
+    plt.imshow(imshow_shape(buffer[1]), cmap = cmap) ; plt.show() ; plt.close() 
     
 
 
@@ -144,7 +151,7 @@ from math import floor
         
 def plot_examples(reals, fakes, e):
     
-    fig, axs = plt.subplots(3, 6)#, figsize = (5,5)) 
+    fig, axs = plt.subplots(3, 6)
     fig.suptitle("{} Epochs".format(e))
         
     for i, ax in enumerate(list(chain.from_iterable(axs))):
@@ -157,7 +164,7 @@ def plot_examples(reals, fakes, e):
         
         buf = fakes if floor(i/3 % 2) == 0 else reals
         image = buf[num]
-        ax.imshow(image, cmap = cmap) 
+        ax.imshow(imshow_shape(image), cmap = cmap) 
         ax.axis("off")
     
     fig.tight_layout()

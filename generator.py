@@ -1,4 +1,4 @@
-
+#%%
 import torch 
 from torch import nn 
 from torchinfo import summary as torch_summary
@@ -16,6 +16,7 @@ def expander(in_channels, out_channels):
             padding =      1,
             padding_mode = "reflect"),
         nn.LeakyReLU(),
+        nn.Dropout(.3),
         nn.Upsample(
             scale_factor = 2, 
             mode = "bilinear"))
@@ -34,18 +35,19 @@ class Generator(nn.Module):
         
         self.seed_in = nn.Sequential(
             nn.Linear(args.seed_size, self.conv_size * self.start_size * self.start_size),
-            nn.LeakyReLU())
+            nn.LeakyReLU(),
+            nn.Dropout(.3))
         
-        self.cnn = nn.Sequential(
-            expander(self.conv_size, self.conv_size), 
-            expander(self.conv_size, self.conv_size))
+        self.cnn = nn.ModuleList()
+        for i in range(2):
+            self.cnn.append(expander(self.conv_size, self.conv_size))
             
         self.image_out = nn.Sequential(
             ConstrainedConv2d(
                 in_channels  = self.conv_size, 
                 out_channels = 1 if args.gray else 3, 
                 kernel_size  = 1),
-            nn.Hardtanh())
+            nn.Tanh())
         
         self.seed_in.apply(init_weights)
         self.cnn.apply(init_weights)
@@ -68,7 +70,14 @@ class Generator(nn.Module):
     def forward(self, seed):
         seed = seed.to(device)
         x = self.seed_in(seed).reshape(seed.shape[0], self.conv_size, self.start_size, self.start_size)
-        x = self.cnn(x)
+        #x += torch.normal(
+        #    mean = torch.zeros(x.shape),
+        #    std  = torch.ones( x.shape)*.25).to(device)
+        for l in self.cnn:
+            x = l(x)
+            #x += torch.normal(
+            #    mean = torch.zeros(x.shape),
+            #    std  = torch.ones( x.shape)*.25).to(device)
         image = self.image_out(x)
         image = image.cpu()
         return((image.permute(0,2,3,1)+1)/2)
@@ -79,3 +88,5 @@ if __name__ == "__main__":
     
     gen = Generator()
                 
+
+# %%
