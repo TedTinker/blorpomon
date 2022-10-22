@@ -9,7 +9,7 @@ parser.add_argument("--gray",       type=bool, default = False)
 parser.add_argument("--image_size", type=int,  default = 16) 
 
 parser.add_argument("--epochs",     type=int,  default = 10000) 
-parser.add_argument("--batch_size", type=int,  default = 128) 
+parser.add_argument("--batch_size", type=int,  default = 64) 
 parser.add_argument("--testing",    type=int,  default = 25) 
 parser.add_argument("--plotting",   type=int,  default = 250) 
 
@@ -123,10 +123,8 @@ def plot_losses(loss_acc):
     
     
     plt.title("Discriminator Losses")
-    plt.plot(xs, loss_acc["dis_real_train_loss"],      color = "blue", label = "Training loss (Real)")
-    plt.plot(test_xs, loss_acc["dis_real_test_loss"],  color = "red",  label = "Testing loss (Real)")
-    plt.plot(xs, loss_acc["dis_fake_train_loss"],      color = "cyan", label = "Training loss (Fake)")
-    plt.plot(test_xs, loss_acc["dis_fake_test_loss"],  color = "pink", label = "Testing loss (Fake)")
+    plt.plot(xs, loss_acc["dis_train_loss"],      color = "blue", label = "Training loss")
+    plt.plot(test_xs, loss_acc["dis_test_loss"],  color = "red",  label = "Testing loss")
     divide_levels(loss_acc["change_level"])
     plt.legend()
     
