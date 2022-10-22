@@ -1,6 +1,7 @@
 #%%
 import torch 
 from torch import nn 
+from torch import linalg as LA
 from torchinfo import summary as torch_summary
 
 from utils import args, device, ConstrainedConv2d, init_weights
@@ -74,7 +75,7 @@ class Discriminator(nn.Module):
         image += torch.normal(
             mean = torch.zeros(image.shape),
             std  = torch.ones( image.shape)*.25).to(device)
-        norm = torch.linalg.norm(torch.clone(image).flatten(1), dim=(1,)).unsqueeze(1)
+        norm = LA.norm(torch.clone(image).flatten(1), dim=(1,)).unsqueeze(1) # Norm isn't helping?
         norm = self.norm_in(norm)
         x = self.image_in(image)
         for l in self.cnn:
