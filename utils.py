@@ -67,7 +67,7 @@ def get_buffer():
         else:           buffer = torch.tile(buffer, (1, 1, 1, 3))
     else:
         buffer = []
-        files = os.listdir("real_images")
+        files = os.listdir("real_images") ; files.sort()
         for file in files:
             if file not in ["bad_pics", "original.png", "break_picture.py"]:
                 pic = image.imread("real_images/" + file)
@@ -135,10 +135,10 @@ def plot_losses(loss_acc):
     
     plt.title("Discriminator Accuracy")
     plt.ylim((0, 100))
-    plt.plot(xs, loss_acc["dis_real_train_acc"],      color = "blue", label = "Training acc (Real)")
-    plt.plot(test_xs, loss_acc["dis_real_test_acc"],  color = "red",  label = "Testing acc (Real)")
-    plt.plot(xs, loss_acc["dis_fake_train_acc"],      color = "cyan", label = "Training acc (Fake)")
-    plt.plot(test_xs, loss_acc["dis_fake_test_acc"],  color = "pink", label = "Testing acc (Fake)")
+    plt.plot(xs, loss_acc["dis_real_train_acc"],      color = "blue", alpha = .5, label = "Training acc (Real)")
+    plt.plot(test_xs, loss_acc["dis_real_test_acc"],  color = "red",  alpha = .5,label = "Testing acc (Real)")
+    plt.plot(xs, loss_acc["dis_fake_train_acc"],      color = "cyan", alpha = .5,label = "Training acc (Fake)")
+    plt.plot(test_xs, loss_acc["dis_fake_test_acc"],  color = "pink", alpha = .5,label = "Testing acc (Fake)")
     divide_levels(loss_acc["change_level"])
     plt.legend()
     

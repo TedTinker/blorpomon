@@ -94,7 +94,6 @@ def train():
     example_seeds = torch.normal(
         mean = torch.zeros([9, args.seed_size]),
         std  = torch.ones( [9, args.seed_size]))
-    example_reals = sample([i for i in range(len(buffer))], 9)
     
     loss_acc = {
         "change_level" : [],        "test_xs" : [],
@@ -105,7 +104,7 @@ def train():
 
     total_epochs = 0
     
-    reals = [buffer[i] for i in example_reals]
+    reals = [buffer[i] for i in range(0, 18, 2)]
     manager = enlighten.Manager()
     E = manager.counter(total = args.epochs, desc = "Epochs:", unit = "ticks", color = "blue")
     for e in range(args.epochs):

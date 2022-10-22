@@ -10,5 +10,5 @@ for i, (r, c) in enumerate(r_c):
     one_image = original[
         image_size * r : image_size * (r+1), 
         image_size * c : image_size * (c+1)]
-    image.imsave("{}.png".format(i), one_image)
+    image.imsave("{}.png".format(str(i).zfill(4)), one_image)
 # %%
