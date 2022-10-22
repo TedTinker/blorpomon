@@ -30,6 +30,8 @@ import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+print("\n\nDevice: {}.\n\n".format(device))
+
 class ConstrainedConv2d(nn.Conv2d):
     def forward(self, input):
         return nn.functional.conv2d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,

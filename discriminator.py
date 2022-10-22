@@ -74,7 +74,7 @@ class Discriminator(nn.Module):
         image += torch.normal(
             mean = torch.zeros(image.shape),
             std  = torch.ones( image.shape)*.25).to(device)
-        norm = torch.linalg.norm(torch.clone(image), dim=(1,2,3)).unsqueeze(1)
+        norm = torch.linalg.norm(torch.clone(image).flatten(1), dim=(1,)).unsqueeze(1)
         norm = self.norm_in(norm)
         x = self.image_in(image)
         for l in self.cnn:

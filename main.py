@@ -5,7 +5,7 @@ from random import sample
 import torch
 from torch.optim import Adam
 import torch.nn.functional as F
-from torchgan.losses import WassersteinGeneratorLoss as WG
+#from torchgan.losses import WassersteinGeneratorLoss as WG
 #from torchgan.losses import WassersteinDiscriminatorLoss as WD
 
 from utils import args, get_buffer, get_batch, plot_losses, plot_examples, make_vid
