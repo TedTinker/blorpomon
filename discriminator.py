@@ -28,40 +28,42 @@ def contracter(in_channels, out_channels):
 
 class Discriminator(nn.Module):
     
-    def __init__(self, var_size = 64):
+    def __init__(self):
         super(Discriminator, self).__init__()
         
-        self.conv_size = 64
         self.start_size = args.image_size // 4
+        self.color_channels = 1 if args.gray else 3
+        
+        self.stats_in = nn.Sequential(
+            nn.Linear(
+                7*self.color_channels + 1, 
+                args.stat_size),
+            nn.LeakyReLU(),
+            nn.Dropout(args.dis_drop))
                 
         self.image_in = nn.Sequential(
-            nn.BatchNorm2d(1 if args.gray else 3),
+            nn.BatchNorm2d(self.color_channels),
             ConstrainedConv2d(
-                in_channels  = 1 if args.gray else 3, 
-                out_channels = self.conv_size, 
+                in_channels  = self.color_channels, 
+                out_channels = args.dis_conv, 
                 kernel_size  = 1),
             nn.LeakyReLU(), 
-            nn.Dropout(.3))
+            nn.Dropout(args.dis_drop))
             #gnn.SelfAttention2d(input_dims = self.conv_size))
-        
-        self.var_in = nn.Sequential(
-            nn.Linear(1, var_size),
-            nn.LeakyReLU(),
-            nn.Dropout(.3))
         
         self.cnn = nn.ModuleList()
         for i in range(2):
-            self.cnn.append(contracter(self.conv_size, self.conv_size))
+            self.cnn.append(contracter(args.dis_conv, args.dis_conv))
         
         self.pred_out = nn.Sequential(
-            nn.Linear(self.conv_size * self.start_size * self.start_size + var_size, self.conv_size),
+            nn.Linear(args.dis_conv * self.start_size * self.start_size + args.stat_size, args.dis_conv),
             nn.LeakyReLU(),
-            nn.Dropout(.3),
-            nn.Linear(self.conv_size, 1),
+            nn.Dropout(args.dis_drop),
+            nn.Linear(args.dis_conv, 1),
             nn.Tanh())
         
         self.image_in.apply(init_weights)
-        self.var_in.apply(init_weights)
+        self.stats_in.apply(init_weights)
         self.cnn.apply(init_weights)
         self.pred_out.apply(init_weights)
         self.to(device)
@@ -69,7 +71,7 @@ class Discriminator(nn.Module):
         print("\n\n")
         print(self)
         print()
-        print(torch_summary(self, ((2, self.start_size*4, self.start_size*4, 1 if args.gray else 3))))
+        print(torch_summary(self, ((2, self.start_size*4, self.start_size*4, self.color_channels))))
         print("\n\n")
             
     def forward(self, image, real = None, verbose = False):
@@ -77,14 +79,31 @@ class Discriminator(nn.Module):
         image = image.permute(0,3,1,2)*2-1
         image += torch.normal(
             mean = torch.zeros(image.shape),
-            std  = torch.ones( image.shape)*.25).to(device)
-        var = torch.mean(torch.var(image, dim = 0)).unsqueeze(0).unsqueeze(0)
-        var = torch.tile(var, (image.shape[0], 1))
-        var = self.var_in(var)
+            std  = torch.ones( image.shape)*args.dis_noise).to(device)
+        
+        # Statistics for each color of each image
+        c_mean   = image.mean(2).mean(2)
+        c_median = image.median(2)[0].median(2)[0]
+        c_mode   = image.mode(2)[0].mode(2)[0]
+        c_var    = image.var(2).var(2)
+        
+        # Statistics for entire batch
+        b_mean   = torch.tile(c_mean.mean(0).unsqueeze(0), (image.shape[0], 1))
+        b_median = torch.tile(c_median.median(0)[0].unsqueeze(0), (image.shape[0], 1))
+        b_mode   = torch.tile(c_mode.mode(0)[0].unsqueeze(0), (image.shape[0], 1))
+        b_var    = torch.tile(torch.mean(torch.var(image, dim = 0)).unsqueeze(0).unsqueeze(0), (image.shape[0], 1))
+        
+        #for stat in [c_mean, c_median, c_mode, c_var, b_mean, b_median, b_mode, b_var]:
+        #    print(stat.shape)
+        
+        stats = torch.cat([c_mean, c_median, c_mode, c_var, 
+                           b_mean, b_median, b_mode, b_var], dim = 1)
+        stats = self.stats_in(stats)
+        
         x = self.image_in(image)
         for l in self.cnn:
             x = l(x)
-        x = torch.cat([x.flatten(1), var], dim = 1)
+        x = torch.cat([x.flatten(1), stats], dim = 1)
         pred = self.pred_out(x).cpu()
         return((pred+1)/2)
         

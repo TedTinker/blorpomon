@@ -30,23 +30,22 @@ class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
         
-        self.conv_size = 64
-        
         self.start_size = args.image_size // 4
+        self.color_channels = 1 if args.gray else 3
         
         self.seed_in = nn.Sequential(
-            nn.Linear(args.seed_size, self.conv_size * self.start_size * self.start_size),
+            nn.Linear(args.seed_size, args.gen_conv * self.start_size * self.start_size),
             nn.LeakyReLU())
         
         self.cnn = nn.ModuleList()
         for i in range(2):
-            self.cnn.append(expander(self.conv_size, self.conv_size))
+            self.cnn.append(expander(args.gen_conv, args.gen_conv))
             
         self.image_out = nn.Sequential(
-            #gnn.SelfAttention2d(input_dims = self.conv_size),
+            #gnn.SelfAttention2d(input_dims = args.gen_conv),
             ConstrainedConv2d(
-                in_channels  = self.conv_size, 
-                out_channels = 1 if args.gray else 3, 
+                in_channels  = args.gen_conv, 
+                out_channels = self.color_channels, 
                 kernel_size  = 1),
             nn.Tanh())
         
@@ -70,17 +69,17 @@ class Generator(nn.Module):
         
     def forward(self, seed):
         seed = seed.to(device)
-        x = self.seed_in(seed).reshape(seed.shape[0], self.conv_size, self.start_size, self.start_size)
-        x = F.dropout(x, .3)
+        x = self.seed_in(seed).reshape(seed.shape[0], args.gen_conv, self.start_size, self.start_size)
+        x = F.dropout(x, args.gen_drop)
         #x += torch.normal(
         #    mean = torch.zeros(x.shape),
-        #    std  = torch.ones( x.shape)*.25).to(device)
+        #    std  = torch.ones( x.shape)*args.gen_noise).to(device)
         for l in self.cnn:
             x = l(x)
-            x = F.dropout(x, .3)
+            x = F.dropout(x, args.gen_drop)
             #x += torch.normal(
             #    mean = torch.zeros(x.shape),
-            #    std  = torch.ones( x.shape)*.25).to(device)
+            #    std  = torch.ones( x.shape)*args.gen_noise).to(device)
         image = self.image_out(x)
         image = image.cpu()
         return((image.permute(0,2,3,1)+1)/2)
