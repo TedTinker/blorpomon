@@ -10,7 +10,7 @@ parser.add_argument("--image_size", type=int,   default = 16)
 
 parser.add_argument("--gen_lr",     type=float, default = .0001) 
 parser.add_argument("--dis_lr",     type=float, default = .0001) 
-parser.add_argument("--dises",      type=int,   default = 10) 
+parser.add_argument("--dises",      type=int,   default = 1) 
 parser.add_argument("--epochs",     type=int,   default = 20000) 
 parser.add_argument("--batch_size", type=int,   default = 64) 
 parser.add_argument("--testing",    type=int,   default = 25) 
@@ -208,19 +208,23 @@ def make_training_vid(fps = 5):
         
         
 
-from math import ceil
 import itertools
 def make_seeding_vid(gens, seeds, betweens = 5, fps = 5):
     seeds = seeds.unsqueeze(0).permute(0, 2, 1)
     seeds = F.interpolate(seeds, scale_factor = betweens, mode = "linear")
     seeds = seeds.squeeze(0).permute(1, 0)
-    images = [gen(seeds).detach() for gen in gens]
+    images = [gen(seeds).detach() for e, gen in gens]
+    original_len = len(images)
+    while(len(images) % 10 != 0):
+        images.append(torch.ones((images[0].shape)))
+        gens.append(("", None))
     
     for i in range(len(images[0])):
-        fig, axs = plt.subplots(ceil(len(gens)/10), 10)
-        ax_list = list(itertools.chain.from_iterable(axs))
+        fig, axs = plt.subplots(len(images)//10, 10)
+        if(original_len > 10): ax_list = list(itertools.chain.from_iterable(axs))
+        else:                   ax_list = axs
         for j, (im, ax) in enumerate(zip(images, ax_list)):
-            ax.title.set_text("Gen {}".format(1 if j == 0 else j * args.keep_gen))
+            ax.title.set_text("{} {}".format("" if gens[j][1] == None else "Gen", gens[j][0]))
             ax.title.set_size(5)
             ax.imshow(imshow_shape(im[i]), cmap = cmap)
         for ax in ax_list: ax.axis("off")

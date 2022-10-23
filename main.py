@@ -1,4 +1,5 @@
 #%%
+import os
 import enlighten 
 from random import sample
 from copy import deepcopy
@@ -135,7 +136,7 @@ def train():
             plot_losses(loss_acc, showing)
         keeping_gen = e == 1 or e == args.epochs or e % args.keep_gen == 0
         if(keeping_gen):
-            gens.append(deepcopy(gen))
+            gens.append((e, deepcopy(gen)))
                 
     make_training_vid()
     make_seeding_vid(gens, example_seeds, betweens = 25, fps = 10)
