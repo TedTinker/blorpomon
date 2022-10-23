@@ -1,6 +1,7 @@
 #%%
 import enlighten 
 from random import sample
+from copy import deepcopy
 
 import torch
 from torch.optim import Adam
@@ -8,23 +9,28 @@ import torch.nn.functional as F
 from torchgan.losses import WassersteinGeneratorLoss as WG
 from torchgan.losses import WassersteinDiscriminatorLoss as WD
 
-from utils import args, get_buffer, get_batch, plot_losses, plot_examples, make_vid
+from utils import args, get_buffer, get_batch, plot_losses, plot_examples, make_training_vid, make_seeding_vid
 from generator import Generator
 from discriminator import Discriminator
 
 
     
-def epoch(test, buffer, batch_size, gen, gen_opt, dis, dis_opt):
+def epoch(test, buffer, batch_size, gen, gen_opt, dises, dis_opts):
     
-    if(test): gen.eval() ; dis.eval() 
-    else:     gen.train(); dis.train() 
+    if(test): 
+        gen.eval()
+        for dis in dises:
+            dis.eval()
+    else:     
+        gen.train()
+        for dis in dises:
+            dis.train()
     
     wg = WG()
     
     gen_opt.zero_grad()
     fake_batch = gen.go(batch_size)
-    guesses = dis(fake_batch, None)
-    #gen_loss = F.binary_cross_entropy(guesses, torch.ones(guesses.shape))
+    guesses = torch.cat([dis(fake_batch, None) for dis in dises], dim = 1)
     gen_loss = wg(guesses)
     
     if(not test):
@@ -36,48 +42,52 @@ def epoch(test, buffer, batch_size, gen, gen_opt, dis, dis_opt):
     real_batch = get_batch(buffer, batch_size)
     with torch.no_grad(): 
         fake_batch = gen.go(batch_size)
+        
+    losses = [] ; real_accs = [] ; fake_accs = []
+        
+    for dis, dis_opt in zip(dises, dis_opts):
     
-    dis_opt.zero_grad()
-    real_guesses = dis(real_batch, True, test)
-    real_guesses_l = [round(g[0]) for g in real_guesses.tolist()]
-    real_acc = sum([1 if g == 1 else 0 for g in real_guesses_l]) / len(real_guesses)
+        dis_opt.zero_grad()
+        real_guesses = dis(real_batch, True, test)
+        real_guesses_l = [round(g[0]) for g in real_guesses.tolist()]
+        real_acc = sum([1 if g == 1 else 0 for g in real_guesses_l]) / len(real_guesses)
+        
+        dis_opt.zero_grad()
+        fake_guesses = dis(fake_batch, False, test)
+        fake_guesses_l = [round(g[0]) for g in fake_guesses.tolist()]
+        fake_acc = sum([1 if g == 0 else 0 for g in fake_guesses_l]) / len(fake_guesses)
+        
+        loss = wd(real_guesses, fake_guesses)
+        
+        if(not test):
+            loss.backward()
+            dis_opt.step()
+            
+        losses.append(loss.item())
+        real_accs.append(real_acc * 100)
+        fake_accs.append(fake_acc * 100)
     
-    dis_opt.zero_grad()
-    fake_guesses = dis(fake_batch, False, test)
-    fake_guesses_l = [round(g[0]) for g in fake_guesses.tolist()]
-    fake_acc = sum([1 if g == 0 else 0 for g in fake_guesses_l]) / len(fake_guesses)
-    
-    loss = wd(real_guesses, fake_guesses)
-    
-    if(not test):
-        loss.backward()
-        dis_opt.step()
-    
-    return(gen_loss.item(), loss.item(), real_acc*100, fake_acc*100)
+    return(gen_loss.item(), losses, real_accs, fake_accs)
         
 
 
-def train_step(e, buffer, batch_size, testing, plotting, loss_acc, reals, example_seeds, gen, gen_opt, dis, dis_opt):
+def train_step(e, buffer, batch_size, testing, loss_acc, gen, gen_opt, dises, dis_opts):
             
-    gen_loss, dis_loss, real_acc, fake_acc = epoch(False, buffer, batch_size, gen, gen_opt, dis, dis_opt)
+    gen_loss, dis_losses, real_accs, fake_accs = epoch(False, buffer, batch_size, gen, gen_opt, dises, dis_opts)
     loss_acc["gen_train_loss"].append(gen_loss)
-    loss_acc["dis_train_loss"].append(dis_loss)
-    loss_acc["dis_real_train_acc"].append(real_acc)
-    loss_acc["dis_fake_train_acc"].append(fake_acc)
+    for d in range(len(dis_losses)):
+        loss_acc["dis_train_loss"][d].append(dis_losses[d])
+        loss_acc["dis_real_train_acc"][d].append(real_accs[d])
+        loss_acc["dis_fake_train_acc"][d].append(fake_accs[d])
     
     if(testing):
         loss_acc["test_xs"].append(e)
-        gen_loss, dis_loss, real_acc, fake_acc = epoch(True, buffer, batch_size, gen, gen_opt, dis, dis_opt)
+        gen_loss, dis_losses, real_accs, fake_accs = epoch(True, buffer, batch_size, gen, gen_opt, dises, dis_opts)
         loss_acc["gen_test_loss" ].append(gen_loss)
-        loss_acc["dis_test_loss"].append(dis_loss)
-        loss_acc["dis_real_test_acc"].append(real_acc)
-        loss_acc["dis_fake_test_acc"].append(fake_acc)
-        
-    if(plotting):
-        gen.eval()
-        fakes = gen(example_seeds).detach().cpu()
-        plot_examples(reals, fakes, e)
-        plot_losses(loss_acc)
+        for d in range(len(dis_losses)):
+            loss_acc["dis_test_loss"][d].append(dis_losses[d])
+            loss_acc["dis_real_test_acc"][d].append(real_accs[d])
+            loss_acc["dis_fake_test_acc"][d].append(fake_accs[d])
     
 
 
@@ -87,36 +97,49 @@ def train():
     
     gen = Generator()
     gen_opt = Adam(gen.parameters(), args.gen_lr)
+    gens = []
 
-    dis = Discriminator()
-    dis_opt = Adam(dis.parameters(), args.dis_lr)
+    dises = [Discriminator() for d in range(args.dises)]
+    dis_opts = [Adam(dis.parameters(), args.dis_lr) for dis in dises]
     
     example_seeds = torch.normal(
         mean = torch.zeros([9, args.seed_size]),
         std  = torch.ones( [9, args.seed_size]))
     
     loss_acc = {
-        "change_level" : [],        "test_xs" : [],
-        "gen_train_loss" : [],      "gen_test_loss" : [],
-        "dis_train_loss" : [],      "dis_test_loss" : [],
-        "dis_real_train_acc" : [],  "dis_real_test_acc" : [],
-        "dis_fake_train_acc" : [],  "dis_fake_test_acc" : []}
+        "change_level" : [],   "test_xs" : [],
+        "gen_train_loss" : [], "gen_test_loss" : [],
+        "dis_train_loss" : [[] for d in range(args.dises)],      "dis_test_loss" : [[] for d in range(args.dises)],
+        "dis_real_train_acc" : [[] for d in range(args.dises)],  "dis_real_test_acc" : [[] for d in range(args.dises)],
+        "dis_fake_train_acc" : [[] for d in range(args.dises)],  "dis_fake_test_acc" : [[] for d in range(args.dises)]}
 
     total_epochs = 0
     
     reals = [buffer[i] for i in range(0, 18, 2)]
     manager = enlighten.Manager()
     E = manager.counter(total = args.epochs, desc = "Epochs:", unit = "ticks", color = "blue")
-    for e in range(args.epochs):
+    for e in range(1, args.epochs+1):
         total_epochs += 1
         E.update()
         train_step(
             total_epochs, buffer, args.batch_size, 
             e == 0 or e == args.epochs-1 or (e+1) % args.testing == 0,
-            e == 0 or e == args.epochs-1 or (e+1) % args.plotting == 0, 
-            loss_acc, reals, example_seeds, gen, gen_opt, dis, dis_opt)
-                
-    make_vid()
+            loss_acc, gen, gen_opt, dises, dis_opts)
         
+        plotting = e == 1 or e == args.epochs or e % args.plotting == 0
+        showing  = e == 1 or e == args.epochs or e % (args.plotting * args.show_plots) == 0
+        if(plotting):
+            gen.eval()
+            fakes = gen(example_seeds).detach().cpu()
+            plot_examples(reals, fakes, e, showing)
+            plot_losses(loss_acc, showing)
+        keeping_gen = e == 1 or e == args.epochs or e % args.keep_gen == 0
+        if(keeping_gen):
+            gens.append(deepcopy(gen))
+                
+    make_training_vid()
+    make_seeding_vid(gens, example_seeds, betweens = 25, fps = 10)
+    
 train()
+print("\n\nDone!\n\n")
 # %%

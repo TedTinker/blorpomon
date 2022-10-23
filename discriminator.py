@@ -26,6 +26,33 @@ def contracter(in_channels, out_channels):
 
 
 
+def get_stats(image):
+    # Statistics for each color of each image
+    c_mean   = image.mean(2).mean(2)
+    c_q      = torch.quantile(image.flatten(2), q = torch.tensor([.01, .05, .15, .25, .35, .5, .65, .75, .85, .95, .99]).to(device), dim = 2).permute(1, 2, 0).flatten(1)
+    c_mode   = image.mode(2)[0].mode(2)[0]
+    c_var    = torch.var(image, dim = (2, 3)) 
+    
+    # Statistics for entire batch
+    b_mean   = torch.tile(c_mean.mean(0).unsqueeze(0), (image.shape[0], 1))
+    b_q      = torch.tile(torch.quantile(image.permute(1, 0, 2, 3).flatten(1), q = torch.tensor([.01, .05, .15, .25, .35, .5, .65, .75, .85, .95, .99]).to(device), dim = 1).flatten(0).unsqueeze(0), (image.shape[0], 1))
+    b_mode   = torch.tile(c_mode.mode(0)[0].unsqueeze(0), (image.shape[0], 1))
+    b_var    = torch.tile(torch.var(image, dim = (0,1,2,3)).unsqueeze(0).unsqueeze(0), (image.shape[0], 1))
+    
+    #for stat in [c_mean, c_q, c_mode, c_var, b_mean, b_q, b_mode, b_var]:
+    #    print(stat.shape)
+    
+    stats = torch.cat([c_mean, c_q, c_mode, c_var, 
+                       b_mean, b_q, b_mode, b_var], dim = 1)
+    return(stats)
+
+
+
+stat_quantity = get_stats(
+    torch.zeros((1, 1 if args.gray else 3, args.image_size, args.image_size)).to(device)).shape[1]
+
+
+
 class Discriminator(nn.Module):
     
     def __init__(self):
@@ -36,7 +63,12 @@ class Discriminator(nn.Module):
         
         self.stats_in = nn.Sequential(
             nn.Linear(
-                7*self.color_channels + 1, 
+                stat_quantity, 
+                args.stat_size),
+            nn.LeakyReLU(),
+            nn.Dropout(args.dis_drop),
+            nn.Linear(
+                args.stat_size, 
                 args.stat_size),
             nn.LeakyReLU(),
             nn.Dropout(args.dis_drop))
@@ -48,8 +80,8 @@ class Discriminator(nn.Module):
                 out_channels = args.dis_conv, 
                 kernel_size  = 1),
             nn.LeakyReLU(), 
-            nn.Dropout(args.dis_drop))
-            #gnn.SelfAttention2d(input_dims = self.conv_size))
+            nn.Dropout(args.dis_drop),
+            gnn.SelfAttention2d(input_dims = args.dis_conv))
         
         self.cnn = nn.ModuleList()
         for i in range(2):
@@ -81,23 +113,7 @@ class Discriminator(nn.Module):
             mean = torch.zeros(image.shape),
             std  = torch.ones( image.shape)*args.dis_noise).to(device)
         
-        # Statistics for each color of each image
-        c_mean   = image.mean(2).mean(2)
-        c_median = image.median(2)[0].median(2)[0]
-        c_mode   = image.mode(2)[0].mode(2)[0]
-        c_var    = image.var(2).var(2)
-        
-        # Statistics for entire batch
-        b_mean   = torch.tile(c_mean.mean(0).unsqueeze(0), (image.shape[0], 1))
-        b_median = torch.tile(c_median.median(0)[0].unsqueeze(0), (image.shape[0], 1))
-        b_mode   = torch.tile(c_mode.mode(0)[0].unsqueeze(0), (image.shape[0], 1))
-        b_var    = torch.tile(torch.mean(torch.var(image, dim = 0)).unsqueeze(0).unsqueeze(0), (image.shape[0], 1))
-        
-        #for stat in [c_mean, c_median, c_mode, c_var, b_mean, b_median, b_mode, b_var]:
-        #    print(stat.shape)
-        
-        stats = torch.cat([c_mean, c_median, c_mode, c_var, 
-                           b_mean, b_median, b_mode, b_var], dim = 1)
+        stats = get_stats(image)
         stats = self.stats_in(stats)
         
         x = self.image_in(image)

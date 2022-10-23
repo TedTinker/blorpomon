@@ -42,7 +42,7 @@ class Generator(nn.Module):
             self.cnn.append(expander(args.gen_conv, args.gen_conv))
             
         self.image_out = nn.Sequential(
-            #gnn.SelfAttention2d(input_dims = args.gen_conv),
+            gnn.SelfAttention2d(input_dims = args.gen_conv),
             ConstrainedConv2d(
                 in_channels  = args.gen_conv, 
                 out_channels = self.color_channels, 
@@ -71,9 +71,9 @@ class Generator(nn.Module):
         seed = seed.to(device)
         x = self.seed_in(seed).reshape(seed.shape[0], args.gen_conv, self.start_size, self.start_size)
         x = F.dropout(x, args.gen_drop)
-        #x += torch.normal(
-        #    mean = torch.zeros(x.shape),
-        #    std  = torch.ones( x.shape)*args.gen_noise).to(device)
+        x += torch.normal(
+            mean = torch.zeros(x.shape),
+            std  = torch.ones( x.shape)*args.gen_noise).to(device)
         for l in self.cnn:
             x = l(x)
             x = F.dropout(x, args.gen_drop)
