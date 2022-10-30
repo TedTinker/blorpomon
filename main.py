@@ -121,7 +121,7 @@ def train():
     example_seeds = torch.normal(
         mean = torch.zeros([9, args.seed_size]),
         std  = torch.ones( [9, args.seed_size]))
-    torch.save(example_seeds, "output/  seeds.pt")
+    torch.save(example_seeds, "output/seeds.pt")
     
     total_epochs = 0
     manager = enlighten.Manager()

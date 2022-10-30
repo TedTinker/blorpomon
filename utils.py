@@ -7,15 +7,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--mnist",      type=bool,  default = False) 
 parser.add_argument("--gray",       type=bool,  default = False) 
 
-parser.add_argument("--gen_lr",     type=float, default = .0005) 
+parser.add_argument("--gen_lr",     type=float, default = .0003) 
 parser.add_argument("--dis_lr",     type=float, default = .0001) 
 parser.add_argument("--dises",      type=int,   default = 5) 
 parser.add_argument("--freeze",     type=bool,  default = True) 
 parser.add_argument("--epochs",     type=dict, default = {
-    (0, int)   : 10, 
-    (0, float) : 10, (1, int) : 10, 
-    (1, float) : 10, (2, int) : 10, 
-    (2, float) : 10, (3, int) : 10, 
+    (0, int)   : 5000, 
+    (0, float) : 5000, (1, int) : 5000, 
+    (1, float) : 5000, (2, int) : 5000, 
+    (2, float) : 5000, (3, int) : 5000, 
     (3, float) : 0, (4, int) : 0}) 
 parser.add_argument("--batch_sizes",type=dict,  default = {    
     (0, int)   : 64, 
@@ -24,9 +24,9 @@ parser.add_argument("--batch_sizes",type=dict,  default = {
     (2, float) : 64, (3, int) : 64, 
     (3, float) : 64, (4, int) : 64}) 
 parser.add_argument("--testing",    type=int,   default = 10) 
-parser.add_argument("--plotting",   type=int,   default = 5) 
-parser.add_argument("--show_plots", type=int,   default = 1) 
-parser.add_argument("--keep_gen",   type=int,   default = 5) 
+parser.add_argument("--plotting",   type=int,   default = 25) 
+parser.add_argument("--show_plots", type=int,   default = 10) 
+parser.add_argument("--keep_gen",   type=int,   default = 1000) 
 
 parser.add_argument("--seed_size",  type=int,   default = 128)
 parser.add_argument("--gen_conv",   type=int,   default = 64)  
