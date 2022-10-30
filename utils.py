@@ -6,17 +6,27 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--mnist",      type=bool,  default = False) 
 parser.add_argument("--gray",       type=bool,  default = False) 
-parser.add_argument("--image_size", type=int,   default = 16) 
 
-parser.add_argument("--gen_lr",     type=float, default = .0001) 
+parser.add_argument("--gen_lr",     type=float, default = .0005) 
 parser.add_argument("--dis_lr",     type=float, default = .0001) 
-parser.add_argument("--dises",      type=int,   default = 1) 
-parser.add_argument("--epochs",     type=int,   default = 20000) 
-parser.add_argument("--batch_size", type=int,   default = 64) 
-parser.add_argument("--testing",    type=int,   default = 25) 
-parser.add_argument("--plotting",   type=int,   default = 25) 
-parser.add_argument("--show_plots", type=int,   default = 10) 
-parser.add_argument("--keep_gen",   type=int,   default = 1000) 
+parser.add_argument("--dises",      type=int,   default = 5) 
+parser.add_argument("--freeze",     type=bool,  default = True) 
+parser.add_argument("--epochs",     type=dict, default = {
+    (0, int)   : 10, 
+    (0, float) : 10, (1, int) : 10, 
+    (1, float) : 10, (2, int) : 10, 
+    (2, float) : 10, (3, int) : 10, 
+    (3, float) : 0, (4, int) : 0}) 
+parser.add_argument("--batch_sizes",type=dict,  default = {    
+    (0, int)   : 64, 
+    (0, float) : 64, (1, int) : 64, 
+    (1, float) : 64, (2, int) : 64, 
+    (2, float) : 64, (3, int) : 64, 
+    (3, float) : 64, (4, int) : 64}) 
+parser.add_argument("--testing",    type=int,   default = 10) 
+parser.add_argument("--plotting",   type=int,   default = 5) 
+parser.add_argument("--show_plots", type=int,   default = 1) 
+parser.add_argument("--keep_gen",   type=int,   default = 5) 
 
 parser.add_argument("--seed_size",  type=int,   default = 128)
 parser.add_argument("--gen_conv",   type=int,   default = 64)  
@@ -26,7 +36,7 @@ parser.add_argument("--gen_noise",  type=float, default = .1)
 parser.add_argument("--stat_size",  type=int,   default = 128)
 parser.add_argument("--dis_conv",   type=int,   default = 64)  
 parser.add_argument("--dis_drop",   type=float, default = .3) 
-parser.add_argument("--dis_noise",  type=float, default = .25) 
+parser.add_argument("--dis_noise",  type=float, default = .1) 
 
 try:    args = parser.parse_args()
 except: args, _ = parser.parse_known_args()
@@ -68,7 +78,7 @@ from keras.datasets import mnist
 
 
 
-def get_buffer():
+def get_buffer(size):
     if(args.mnist): 
         (train_x, _), (test_x, _) = mnist.load_data()
         buffer = np.concatenate([train_x, test_x], axis = 0)    
@@ -88,7 +98,7 @@ def get_buffer():
         buffer = torch.from_numpy(np.stack(buffer, axis=0))
         if(args.gray):  buffer = torch.mean(buffer, -1).unsqueeze(-1)
         else:           pass
-    buffer = F.interpolate(buffer.permute(0, 3, 1, 2), size = args.image_size).permute(0, 2, 3, 1)
+    buffer = F.interpolate(buffer.permute(0, 3, 1, 2), size = size, mode = "bilinear").permute(0, 2, 3, 1)
     return(buffer)
     
 def get_batch(buffer, batch_size):
@@ -107,68 +117,123 @@ def imshow_shape(image):
 
             
 if __name__ == "__main__":
-    buffer = get_buffer()
+    buffer = get_buffer(16)
     plt.imshow(imshow_shape(buffer[0]), cmap = cmap) ; plt.show() ; plt.close() 
     plt.imshow(imshow_shape(buffer[1]), cmap = cmap) ; plt.show() ; plt.close() 
     
+    
+    
+# Monitor GPU memory.
+def get_free_mem(string = ""):
+    r = torch.cuda.memory_reserved(0)
+    a = torch.cuda.memory_allocated(0)
+    f = r-a  # free inside reserved
+    print("\n{}: {}.\n".format(string, f))
+    pass 
+
+# Remove from GPU memory.
+def delete_these(verbose = False, *args):
+    if(verbose): get_free_mem("Before deleting")
+    del args
+    #torch.cuda.empty_cache()
+    if(verbose): get_free_mem("After deleting")    
+
 
 
 def divide_levels(here, plot = plt):
     for h in here:
         plot.axvline(x=h, color = (0,0,0,.2))
         
+def get_min_median_max(loss_acc, name):
+    mins    = [l[0] for l in loss_acc[name]]
+    medians = [l[1] for l in loss_acc[name]]
+    maxs    = [l[2] for l in loss_acc[name]]
+    return(mins, medians, maxs)
+
+line_alpha = .25 ; fill_alpha = .1
 def plot_losses(loss_acc, show):
     
     xs = [x for x in range(len(loss_acc["gen_train_loss"]))]
     test_xs = loss_acc["test_xs"]
     
     plt.title("Generator Losses")
-    plt.plot(xs, loss_acc["gen_train_loss"],      color = "blue", label = "Training loss")
-    plt.plot(test_xs, loss_acc["gen_test_loss"],  color = "red",  label = "Testing loss")
+    plt.plot(test_xs, loss_acc["gen_test_loss"],  color = "red",  label = "Testing loss", alpha = line_alpha)
+    plt.plot(xs, loss_acc["gen_train_loss"],      color = "blue", label = "Training loss", alpha = line_alpha)
     divide_levels(loss_acc["change_level"])
     plt.legend()
     
-    plt.savefig("output/gen_loss.png") 
+    plt.savefig("output/gen_loss.png", dpi=100) 
+    #if(show): plt.show()
+    plt.close()
+    
+        
+    train_loss_mins, train_loss_medians, train_loss_maxs = \
+        get_min_median_max(loss_acc, "dis_train_loss")
+    test_loss_mins,  test_loss_medians,  test_loss_maxs  = \
+        get_min_median_max(loss_acc, "dis_test_loss")
+    
+    real_train_acc_mins, real_train_acc_medians, real_train_acc_maxs = \
+        get_min_median_max(loss_acc, "dis_real_train_acc")
+    real_test_acc_mins,  real_test_acc_medians,  real_test_acc_maxs  = \
+        get_min_median_max(loss_acc, "dis_real_test_acc")
+    fake_train_acc_mins, fake_train_acc_medians, fake_train_acc_maxs = \
+        get_min_median_max(loss_acc, "dis_fake_train_acc")
+    fake_test_acc_mins,  fake_test_acc_medians,  fake_test_acc_maxs  = \
+        get_min_median_max(loss_acc, "dis_fake_test_acc")
+        
+        
+            
+    plt.title("Discriminator Losses")
+    plt.fill_between(test_xs, test_loss_mins, test_loss_maxs, color = "red", alpha = fill_alpha)
+    plt.fill_between(xs, train_loss_mins, train_loss_maxs, color = "blue", alpha = fill_alpha)
+    plt.plot(test_xs, test_loss_medians, color = "red", alpha = line_alpha, label = "Testing loss")
+    plt.plot(xs, train_loss_medians, color = "blue", alpha = line_alpha, label = "Training loss")
+    divide_levels(loss_acc["change_level"])
+    plt.legend()
+    
+    plt.savefig("output/dis_loss.png", dpi=100) 
     #if(show): plt.show()
     plt.close()
     
     
     
-    for d in range(args.dises):
-        plt.title("Discriminator {} Losses".format(d+1))
-        plt.plot(xs, loss_acc["dis_train_loss"][d],      color = "blue", label = "Training loss")
-        plt.plot(test_xs, loss_acc["dis_test_loss"][d],  color = "red",  label = "Testing loss")
-        divide_levels(loss_acc["change_level"])
-        plt.legend()
-        
-        plt.savefig("output/dis_{}_loss.png".format(d+1)) 
-        #if(show): plt.show()
-        plt.close()
-        
-        
-        
-        plt.title("Discriminator {} Accuracy".format(d+1))
-        plt.ylim((0, 100))
-        plt.plot(xs, loss_acc["dis_real_train_acc"][d],      color = "blue", alpha = .5, label = "Training acc (Real)")
-        plt.plot(test_xs, loss_acc["dis_real_test_acc"][d],  color = "red",  alpha = .5,label = "Testing acc (Real)")
-        plt.plot(xs, loss_acc["dis_fake_train_acc"][d],      color = "cyan", alpha = .5,label = "Training acc (Fake)")
-        plt.plot(test_xs, loss_acc["dis_fake_test_acc"][d],  color = "pink", alpha = .5,label = "Testing acc (Fake)")
-        divide_levels(loss_acc["change_level"])
-        plt.legend()
-        
-        plt.savefig("output/dis_{}_acc.png".format(d+1))
-        if(show): plt.show()
-        plt.close()
+    plt.title("Discriminator Accuracy (Reals)")
+    plt.ylim((0, 100))
+    plt.fill_between(test_xs, real_test_acc_mins, real_test_acc_maxs, color = "red", alpha = fill_alpha)
+    plt.fill_between(xs, real_train_acc_mins, real_train_acc_maxs, color = "blue", alpha = fill_alpha)
+    plt.plot(test_xs, real_test_acc_medians, color = "red", alpha = line_alpha, label = "Testing acc (Real)")
+    plt.plot(xs, real_train_acc_medians, color = "blue", alpha = line_alpha, label = "Training acc (Real)")
+    divide_levels(loss_acc["change_level"])
+    plt.legend()
+    
+    plt.savefig("output/dis_acc_real.png", dpi=100)
+    if(show): plt.show()
+    plt.close()
+    
+    
+    
+    plt.title("Discriminator Accuracy (Fakes)")
+    plt.ylim((0, 100))
+    plt.fill_between(test_xs, fake_test_acc_mins, fake_test_acc_maxs, color = "red", alpha = fill_alpha)
+    plt.fill_between(xs, fake_train_acc_mins, fake_train_acc_maxs, color = "blue", alpha = fill_alpha)
+    plt.plot(test_xs, fake_test_acc_medians, color = "red", alpha = line_alpha, label = "Testing acc (Fake)")
+    plt.plot(xs, fake_train_acc_medians, color = "blue", alpha = line_alpha, label = "Training acc (Fake)")
+    divide_levels(loss_acc["change_level"])
+    plt.legend()
+    
+    plt.savefig("output/dis_acc_fake.png", dpi=100)
+    if(show): plt.show()
+    plt.close()
     
     
 
 from itertools import chain
 from math import floor
         
-def plot_examples(reals, fakes, e, show):
+def plot_examples(reals, fakes, e, level, size, show):
     
     fig, axs = plt.subplots(3, 6)
-    fig.suptitle("{} Epochs".format(e))
+    fig.suptitle("{} Epochs (Level {} : {} Pixels)".format(e, level, size))
         
     for i, ax in enumerate(list(chain.from_iterable(axs))):
         if(i == 1): ax.title.set_text("Generated")
@@ -184,7 +249,7 @@ def plot_examples(reals, fakes, e, show):
         ax.axis("off")
     
     fig.tight_layout()
-    plt.savefig("output/blorpomon_{}".format(str(e).zfill(10)), dpi=300)
+    plt.savefig("output/blorpomon_{}".format(str(e).zfill(10)), dpi=100)
     if(show): plt.show()
     plt.close()
     
@@ -209,27 +274,37 @@ def make_training_vid(fps = 5):
         
 
 import itertools
-def make_seeding_vid(gens, seeds, betweens = 5, fps = 5):
-    seeds = seeds.unsqueeze(0).permute(0, 2, 1)
-    seeds = F.interpolate(seeds, scale_factor = betweens, mode = "linear")
-    seeds = seeds.squeeze(0).permute(1, 0)
-    images = [gen(seeds).detach() for e, gen in gens]
+def make_seeding_vid(betweens = 5, fps = 5):
+    seeds = torch.load("output/seeds.pt")
+    seed_list = list(torch.split(seeds, 1, dim = 0))
+    seed_list.append(seed_list[0])
+    seeds = seed_list[0]
+    for seed, next_seed in zip(seed_list[:-1], seed_list[1:]):
+        between_list = [i/(betweens+1) for i in range(1, betweens+2)]
+        for b in between_list:
+            seeds = torch.cat([seeds, (1-b)*seed + b*next_seed])
+    
+    gen_files = os.listdir("output/gens") ; gen_files.sort()
+    gens = [torch.load("output/gens/" + file) for file in gen_files]
+    images = [gen(seeds).detach() for gen in gens]
     original_len = len(images)
     while(len(images) % 10 != 0):
         images.append(torch.ones((images[0].shape)))
-        gens.append(("", None))
+        gens.append(None)
     
     for i in range(len(images[0])):
         fig, axs = plt.subplots(len(images)//10, 10)
         if(original_len > 10): ax_list = list(itertools.chain.from_iterable(axs))
         else:                   ax_list = axs
         for j, (im, ax) in enumerate(zip(images, ax_list)):
-            ax.title.set_text("{} {}".format("" if gens[j][1] == None else "Gen", gens[j][0]))
+            gen = gens[j]
+            ax.title.set_text("{}".format(
+                "" if gen == None else "Gen {}\nLevel {}".format(gen.epochs, round(gen.level, 3))))
             ax.title.set_size(5)
             ax.imshow(imshow_shape(im[i]), cmap = cmap)
         for ax in ax_list: ax.axis("off")
         plt.tight_layout()
-        plt.savefig("output/seed_{}".format(str(i).zfill(10)), dpi=300)
+        plt.savefig("output/seed_{}".format(str(i).zfill(10)), dpi=100)
         plt.close() 
         
     files = os.listdir("output")
