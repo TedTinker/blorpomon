@@ -125,10 +125,10 @@ class Discriminator(nn.Module):
         self.level = level 
         if(args.freeze):
             freeze_list = [] ; frozen_list = []
-            if(level > 1): freeze_list.append(self.cnn[-1]) ; frozen_list.append(-1)
-            if(level > 2): freeze_list.append(self.cnn[-2]) ; frozen_list.append(-2)
-            if(level > 3): freeze_list.append(self.cnn[-3]) ; frozen_list.append(-3)
-            if(level > 4): freeze_list.append(self.cnn[-4]) ; frozen_list.append(-4)
+            if(level > 1): freeze_list.append(self.cnn_4) ; frozen_list.append(-1)
+            if(level > 2): freeze_list.append(self.cnn_3) ; frozen_list.append(-2)
+            if(level > 3): freeze_list.append(self.cnn_2) ; frozen_list.append(-3)
+            if(level > 4): freeze_list.append(self.cnn_1) ; frozen_list.append(-4)
             for layer in freeze_list:
                 layer.requires_grad_(False)
             if(self.verbose): print("Frozen:", frozen_list)
