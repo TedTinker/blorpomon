@@ -18,7 +18,7 @@ from discriminator import Discriminator
 
 
     
-def epoch(test, buffer, batch_size, gen, gen_opt, dises, dis_opts):
+def epoch(test, buffer, batch_size, prev_batches, gen, gen_opt, dises, dis_opts):
     
     if(test): 
         gen.eval()
@@ -45,6 +45,21 @@ def epoch(test, buffer, batch_size, gen, gen_opt, dises, dis_opts):
     real_batch = get_batch(buffer, batch_size)
     with torch.no_grad(): 
         fake_batch = gen.go(batch_size)
+    
+    if(not test):
+        prev_batch_keys = list(prev_batches.keys())
+        for i in prev_batch_keys:
+            if(prev_batches[i] != []):
+                fake_batch = torch.cat([prev_batches[i][i], fake_batch], dim = 0)
+        prev_batch_keys.reverse()
+        for i in prev_batch_keys:
+            if(i+1 in prev_batch_keys):
+                prev_batches[i+1] = prev_batches[i]
+        prev_batches[0] = []
+        for size in args.prev_batch:
+            prev_batches[0].append(fake_batch[-size:])
+            fake_batch = fake_batch[:-size]
+        real_batch = real_batch[:fake_batch.shape[0]]        
         
     losses = [] ; real_accs = [] ; fake_accs = []
     for dis, dis_opt in zip(dises, dis_opts):
@@ -77,9 +92,9 @@ def epoch(test, buffer, batch_size, gen, gen_opt, dises, dis_opts):
         
 
 
-def train_step(e, buffer, batch_size, testing, loss_acc, gen, gen_opt, dises, dis_opts):
-            
-    gen_loss, dis_loss, real_acc, fake_acc = epoch(False, buffer, batch_size, gen, gen_opt, dises, dis_opts)
+def train_step(e, buffer, batch_size, prev_batches, testing, loss_acc, gen, gen_opt, dises, dis_opts):
+    
+    gen_loss, dis_loss, real_acc, fake_acc = epoch(False, buffer, batch_size, prev_batches, gen, gen_opt, dises, dis_opts)
     loss_acc["gen_train_loss"].append(gen_loss)
     loss_acc["dis_train_loss"].append(dis_loss)
     loss_acc["dis_real_train_acc"].append(real_acc)
@@ -87,7 +102,7 @@ def train_step(e, buffer, batch_size, testing, loss_acc, gen, gen_opt, dises, di
     
     if(testing):
         loss_acc["test_xs"].append(e)
-        gen_loss, dis_loss, real_acc, fake_acc = epoch(True, buffer, batch_size, gen, gen_opt, dises, dis_opts)
+        gen_loss, dis_loss, real_acc, fake_acc = epoch(True, buffer, batch_size, prev_batches, gen, gen_opt, dises, dis_opts)
         loss_acc["gen_test_loss" ].append(gen_loss)
         loss_acc["dis_test_loss"].append(dis_loss)
         loss_acc["dis_real_test_acc"].append(real_acc)
@@ -102,8 +117,8 @@ def train():
 
     os.mkdir("output")
     os.mkdir("output/gens")
+    torch.save(args, "output/args.pt")
     
-        
     gen = Generator()
     gen_opt = Adam(gen.parameters(), args.gen_lr)
 
@@ -130,6 +145,7 @@ def train():
         loss_acc["change_level"].append(total_epochs)
         epochs = args.epochs[floor(level), type(level)]
         batch_size = args.batch_sizes[floor(level), type(level)]
+        prev_batches = {i : [] for i, _ in enumerate(args.prev_batch)}
         E = manager.counter(total = epochs, desc = "Level {}:".format(level), unit = "ticks", color = "blue")
         if(type(level)) == int:
             buffer = get_buffer(2**(level+2))
@@ -155,7 +171,7 @@ def train():
             E.update()
             
             train_step(
-                total_epochs, buffer, batch_size, 
+                total_epochs, buffer, batch_size, prev_batches,
                 e == 1 or e == epochs or e % args.testing == 0,
                 loss_acc, gen, gen_opt, dises, dis_opts)
             
@@ -168,7 +184,7 @@ def train():
                 plot_losses(loss_acc, showing)
             keeping_gen = e == 1 or e == epochs or e % args.keep_gen == 0
             if(keeping_gen): 
-                torch.save(deepcopy(gen), "output/gens/gen_{}.pt".format(str(total_epochs)).zfill(10))
+                torch.save(deepcopy(gen), "output/gens/gen_{}.pt".format(str(total_epochs).zfill(10)))
     
 train()
 print("\n\nDone!\n\n")

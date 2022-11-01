@@ -13,12 +13,17 @@ from utils import args, device, ConstrainedConv2d, init_weights
 
 def expander(in_channels, out_channels):
     layer = nn.Sequential(
-        ConstrainedConv2d(
-            in_channels  = in_channels, 
-            out_channels = out_channels, 
-            kernel_size  = 3,
-            padding =      1,
-            padding_mode = "reflect"),
+        gnn.SelfAttention2d(input_dims = in_channels),
+        #ConstrainedConv2d(
+        #    in_channels  = in_channels, 
+        #    out_channels = out_channels, 
+        #    kernel_size  = 3,
+        #    padding      = 1,
+        #    padding_mode = "reflect"),
+        gnn.ResidualBlock2d(
+            filters = [in_channels, 2*args.gen_conv, 4*args.gen_conv, out_channels], 
+            kernels = [3, 3, 3],
+            paddings = [1, 1, 1]),
         nn.LeakyReLU(),
         nn.Upsample(
             scale_factor = 2, 
@@ -41,9 +46,10 @@ class Generator(nn.Module):
             nn.Linear(args.seed_size, args.gen_conv * 4 * 4),
             nn.LeakyReLU())
         
-        self.cnn = nn.ModuleList()
-        for i in range(4):
-            self.cnn.append(expander(args.gen_conv, args.gen_conv))
+        self.cnn_1 = expander(args.gen_conv, args.gen_conv)
+        self.cnn_2 = expander(args.gen_conv, args.gen_conv)
+        self.cnn_3 = expander(args.gen_conv, args.gen_conv)
+        self.cnn_4 = expander(args.gen_conv, args.gen_conv)
             
         self.image_out = nn.Sequential(
             gnn.SelfAttention2d(input_dims = args.gen_conv),
@@ -54,7 +60,10 @@ class Generator(nn.Module):
             nn.Tanh())
         
         self.seed_in.apply(init_weights)
-        self.cnn.apply(init_weights)
+        self.cnn_1.apply(init_weights)
+        self.cnn_2.apply(init_weights)
+        self.cnn_3.apply(init_weights)
+        self.cnn_4.apply(init_weights)
         self.image_out.apply(init_weights)
         self.to(device)
         
@@ -87,6 +96,7 @@ class Generator(nn.Module):
         return(self.forward(seed))
         
     def forward(self, seed):
+        cnn_list = [self.cnn_1, self.cnn_2, self.cnn_3, self.cnn_4]
         seed = seed.to(device)
         x = self.seed_in(seed).reshape(seed.shape[0], args.gen_conv, 4, 4)
         x = F.dropout(x, args.gen_drop)
@@ -99,7 +109,7 @@ class Generator(nn.Module):
         elif(type(self.level) == int):
             for l in range(self.level):
                 if(self.verbose): print("\nOrdinary {}\n".format(l))
-                x = self.cnn[l](x)
+                x = cnn_list[l](x)
                 x = F.dropout(x, args.gen_drop)
             image = self.image_out(x)
         else:
@@ -107,11 +117,11 @@ class Generator(nn.Module):
             alpha = self.level - level
             for l in range(level):
                 if(self.verbose): print("\nOrdinary {}\n".format(l))
-                x = self.cnn[l](x)
+                x = cnn_list[l](x)
                 x = F.dropout(x, args.gen_drop)
             old_image = F.interpolate(self.image_out(x), scale_factor = 2, mode = "nearest")
             if(self.verbose): print("\nProgressive {}\n".format(level))
-            x = self.cnn[level](x)
+            x = cnn_list[level](x)
             x = F.dropout(x, args.gen_drop)
             new_image = self.image_out(x)
             image = (1 - alpha) * old_image + alpha * new_image
@@ -126,7 +136,7 @@ if __name__ == "__main__":
     
     gen = Generator() ; gen.verbose = True
                 
-    for level in [0, .5]:#, 1, 1.5, 2, 2.5, 3, 3.5, 4]:
+    for level in [0, .5, 1, 1.5, 2, 2.5, 3, 3.5, 4]:
         print("\n\nLEVEL {}\n\n".format(level))
         gen.change_level(level)
         gen.summary()

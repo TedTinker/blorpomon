@@ -14,13 +14,19 @@ from utils import args, device, ConstrainedConv2d, init_weights
     
 def contracter(in_channels, out_channels):
     layer = nn.Sequential(
-        ConstrainedConv2d(
-            in_channels  = in_channels, 
-            out_channels = out_channels, 
-            kernel_size  = 3,
-            padding      = 1,
-            padding_mode = "reflect",
-            stride       = 2),
+        gnn.SelfAttention2d(input_dims = in_channels),
+        #ConstrainedConv2d(
+        #    in_channels  = in_channels, 
+        #    out_channels = out_channels, 
+        #    kernel_size  = 3,
+        #    padding      = 1,
+        #    padding_mode = "reflect"),
+        gnn.ResidualBlock2d(
+            filters = [in_channels, 2*args.gen_conv, 4*args.gen_conv, out_channels], 
+            kernels = [3, 3, 3],
+            paddings = [1, 1, 1]),
+        nn.AvgPool2d(
+            kernel_size = 2),
         nn.LeakyReLU())
     return(layer)
 
@@ -85,9 +91,10 @@ class Discriminator(nn.Module):
             nn.Dropout(args.dis_drop),
             gnn.SelfAttention2d(input_dims = args.dis_conv))
         
-        self.cnn = nn.ModuleList()
-        for i in range(4):
-            self.cnn.append(contracter(args.dis_conv, args.dis_conv))
+        self.cnn_1 = contracter(args.dis_conv, args.dis_conv)
+        self.cnn_2 = contracter(args.dis_conv, args.dis_conv)
+        self.cnn_3 = contracter(args.dis_conv, args.dis_conv)
+        self.cnn_4 = contracter(args.dis_conv, args.dis_conv)
         
         self.pred_out = nn.Sequential(
             nn.Linear(args.dis_conv * 4 * 4 + args.stat_size, args.dis_conv),
@@ -98,7 +105,10 @@ class Discriminator(nn.Module):
         
         self.image_in.apply(init_weights)
         self.stats_in.apply(init_weights)
-        self.cnn.apply(init_weights)
+        self.cnn_1.apply(init_weights)
+        self.cnn_2.apply(init_weights)
+        self.cnn_3.apply(init_weights)
+        self.cnn_4.apply(init_weights)
         self.pred_out.apply(init_weights)
         self.to(device)
         
@@ -124,6 +134,7 @@ class Discriminator(nn.Module):
             if(self.verbose): print("Frozen:", frozen_list)
             
     def forward(self, image):
+        cnn_list = [self.cnn_1, self.cnn_2, self.cnn_3, self.cnn_4]
         image = image.to(device)
         image = image.permute(0,3,1,2)*2-1
         image += torch.normal(
@@ -139,7 +150,7 @@ class Discriminator(nn.Module):
             if(type(self.level) == int):
                 for l in [-(self.level - i) for i in range(self.level)]:
                     if(self.verbose): print("\nOrdinary {}\n".format(l))
-                    x = self.cnn[l](x)
+                    x = cnn_list[l](x)
                     x = F.dropout(x, args.gen_drop)
             else:
                 level = floor(self.level)
@@ -147,12 +158,12 @@ class Discriminator(nn.Module):
                 old_image = F.interpolate(image, scale_factor = .5, mode = "nearest")
                 old_x = self.image_in(old_image)
                 if(self.verbose): print("\nProgressive {}\n".format(-level - 1))
-                new_x = self.cnn[-level - 1](x)
+                new_x = cnn_list[-level - 1](x)
                 new_x = F.dropout(new_x, args.gen_drop)
                 x = (1 - alpha) * old_x + alpha * new_x
                 for l in [-(level - i + 1) + 1 for i in range(level)]:
                     if(self.verbose): print("\nOrdinary {}\n".format(l))
-                    x = self.cnn[l](x)
+                    x = cnn_list[l](x)
                     x = F.dropout(x, args.gen_drop)
             
         x = torch.cat([x.flatten(1), stats], dim = 1)
@@ -166,7 +177,8 @@ if __name__ == "__main__":
     
     dis = Discriminator() ; dis.verbose = True
     
-    for level in [0, .5, 1, 1.5, 2, 2.5, 3, 3.5, 4]:
+    #for level in [0, .5, 1, 1.5, 2, 2.5, 3, 3.5, 4]:
+    for level in [0, .5]:
         print("LEVEL {}".format(level))
         dis.change_level(level)
         dis.summary()
