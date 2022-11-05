@@ -21,9 +21,9 @@ def expander(in_channels, out_channels):
         #    padding      = 1,
         #    padding_mode = "reflect"),
         gnn.ResidualBlock2d(
-            filters = [in_channels, 2*args.gen_conv, 4*args.gen_conv, out_channels], 
-            kernels = [3, 3, 3],
-            paddings = [1, 1, 1]),
+            filters = [in_channels, 2*args.gen_conv, out_channels], 
+            kernels = [3, 3],
+            paddings = [1, 1]),
         nn.LeakyReLU(),
         nn.Upsample(
             scale_factor = 2, 
@@ -42,9 +42,10 @@ class Generator(nn.Module):
         self.level = 0
         self.color_channels = 1 if args.gray else 3
         
-        self.seed_in = nn.Sequential(
-            nn.Linear(args.seed_size, args.gen_conv * 4 * 4),
-            nn.LeakyReLU())
+        self.seed_in_mean = nn.Sequential(
+            nn.Linear(args.seed_size, args.gen_conv * 4 * 4))
+        self.seed_in_std  = nn.Sequential(
+            nn.Linear(args.seed_size, args.gen_conv * 4 * 4))
         
         self.cnn_1 = expander(args.gen_conv, args.gen_conv)
         self.cnn_2 = expander(args.gen_conv, args.gen_conv)
@@ -59,12 +60,13 @@ class Generator(nn.Module):
                 kernel_size  = 1),
             nn.Tanh())
         
-        self.seed_in.apply(init_weights)
-        self.cnn_1.apply(init_weights)
-        self.cnn_2.apply(init_weights)
-        self.cnn_3.apply(init_weights)
-        self.cnn_4.apply(init_weights)
-        self.image_out.apply(init_weights)
+        self.seed_in_mean.apply(    init_weights)
+        self.seed_in_std.apply(     init_weights)
+        self.cnn_1.apply(           init_weights)
+        self.cnn_2.apply(           init_weights)
+        self.cnn_3.apply(           init_weights)
+        self.cnn_4.apply(           init_weights)
+        self.image_out.apply(       init_weights)
         self.to(device)
         
     def summary(self):
@@ -78,7 +80,7 @@ class Generator(nn.Module):
         
     def change_level(self, level):
         self.level = level 
-        if(args.freeze):
+        if(args.freeze[0]):
             freeze_list = [] ; frozen_list = []
             if(level > 1): freeze_list.append(self.cnn_1) ; frozen_list.append(0)
             if(level > 2): freeze_list.append(self.cnn_2) ; frozen_list.append(1)
@@ -98,11 +100,16 @@ class Generator(nn.Module):
     def forward(self, seed):
         cnn_list = [self.cnn_1, self.cnn_2, self.cnn_3, self.cnn_4]
         seed = seed.to(device)
-        x = self.seed_in(seed).reshape(seed.shape[0], args.gen_conv, 4, 4)
-        x = F.dropout(x, args.gen_drop)
-        #x += torch.normal(
-        #    mean = torch.zeros(x.shape),
-        #    std  = torch.ones( x.shape)*args.gen_noise).to(device)
+        x = self.seed_in_mean(seed).reshape(seed.shape[0], args.gen_conv, 4, 4)
+        if(self.training):
+            std = self.seed_in_std(seed).reshape(seed.shape[0], args.gen_conv, 4, 4)
+            std = torch.log(1 + torch.exp(std)) + 1e-6
+            e = torch.normal(torch.zeros((std.shape)), torch.ones((std.shape))).to(device)
+            x += std*e
+            x += torch.normal(
+                mean = torch.zeros(x.shape),
+                std  = torch.ones( x.shape)*args.gen_noise).to(device)
+            x = F.dropout(x, args.gen_drop)
         
         if(self.level == 0): 
             image = self.image_out(x)
@@ -110,7 +117,7 @@ class Generator(nn.Module):
             for l in range(self.level):
                 if(self.verbose): print("\nOrdinary {}\n".format(l))
                 x = cnn_list[l](x)
-                x = F.dropout(x, args.gen_drop)
+                if(self.training): x = F.dropout(x, args.gen_drop)
             image = self.image_out(x)
         else:
             level = floor(self.level)
@@ -118,11 +125,11 @@ class Generator(nn.Module):
             for l in range(level):
                 if(self.verbose): print("\nOrdinary {}\n".format(l))
                 x = cnn_list[l](x)
-                x = F.dropout(x, args.gen_drop)
+                if(self.training): x = F.dropout(x, args.gen_drop)
             old_image = F.interpolate(self.image_out(x), scale_factor = 2, mode = "nearest")
             if(self.verbose): print("\nProgressive {}\n".format(level))
             x = cnn_list[level](x)
-            x = F.dropout(x, args.gen_drop)
+            if(self.training): x = F.dropout(x, args.gen_drop)
             new_image = self.image_out(x)
             image = (1 - alpha) * old_image + alpha * new_image
 

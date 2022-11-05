@@ -22,9 +22,9 @@ def contracter(in_channels, out_channels):
         #    padding      = 1,
         #    padding_mode = "reflect"),
         gnn.ResidualBlock2d(
-            filters = [in_channels, 2*args.gen_conv, 4*args.gen_conv, out_channels], 
-            kernels = [3, 3, 3],
-            paddings = [1, 1, 1]),
+            filters = [in_channels, 2*args.gen_conv, out_channels], 
+            kernels = [3, 3],
+            paddings = [1, 1]),
         nn.AvgPool2d(
             kernel_size = 2),
         nn.LeakyReLU())
@@ -123,7 +123,7 @@ class Discriminator(nn.Module):
         
     def change_level(self, level):
         self.level = level 
-        if(args.freeze):
+        if(args.freeze[1]):
             freeze_list = [] ; frozen_list = []
             if(level > 1): freeze_list.append(self.cnn_4) ; frozen_list.append(-1)
             if(level > 2): freeze_list.append(self.cnn_3) ; frozen_list.append(-2)
@@ -137,9 +137,10 @@ class Discriminator(nn.Module):
         cnn_list = [self.cnn_1, self.cnn_2, self.cnn_3, self.cnn_4]
         image = image.to(device)
         image = image.permute(0,3,1,2)*2-1
-        image += torch.normal(
-            mean = torch.zeros(image.shape),
-            std  = torch.ones( image.shape)*args.dis_noise).to(device)
+        if(self.training):
+            image += torch.normal(
+                mean = torch.zeros(image.shape),
+                std  = torch.ones( image.shape)*args.dis_noise).to(device)
         
         stats = get_stats(image)
         stats = self.stats_in(stats)
@@ -151,7 +152,7 @@ class Discriminator(nn.Module):
                 for l in [-(self.level - i) for i in range(self.level)]:
                     if(self.verbose): print("\nOrdinary {}\n".format(l))
                     x = cnn_list[l](x)
-                    x = F.dropout(x, args.gen_drop)
+                    if(self.training): x = F.dropout(x, args.gen_drop)
             else:
                 level = floor(self.level)
                 alpha = self.level - level
@@ -159,12 +160,12 @@ class Discriminator(nn.Module):
                 old_x = self.image_in(old_image)
                 if(self.verbose): print("\nProgressive {}\n".format(-level - 1))
                 new_x = cnn_list[-level - 1](x)
-                new_x = F.dropout(new_x, args.gen_drop)
+                if(self.training): new_x = F.dropout(new_x, args.gen_drop)
                 x = (1 - alpha) * old_x + alpha * new_x
                 for l in [-(level - i + 1) + 1 for i in range(level)]:
                     if(self.verbose): print("\nOrdinary {}\n".format(l))
                     x = cnn_list[l](x)
-                    x = F.dropout(x, args.gen_drop)
+                    if(self.training): x = F.dropout(x, args.gen_drop)
             
         x = torch.cat([x.flatten(1), stats], dim = 1)
         pred = self.pred_out(x).cpu()
@@ -177,8 +178,7 @@ if __name__ == "__main__":
     
     dis = Discriminator() ; dis.verbose = True
     
-    #for level in [0, .5, 1, 1.5, 2, 2.5, 3, 3.5, 4]:
-    for level in [0, .5]:
+    for level in [0, .5, 1, 1.5, 2, 2.5, 3, 3.5, 4]:
         print("LEVEL {}".format(level))
         dis.change_level(level)
         dis.summary()
