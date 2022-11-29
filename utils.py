@@ -5,18 +5,28 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--images",     type=str,   default = "pokemon") # mnist, pokemon
+parser.add_argument("--images",     type=str,   default = "faces") # mnist, pokemon, faces
 parser.add_argument("--gray",       type=bool,  default = False) 
 
-parser.add_argument("--gen_lr",     type=float, default = .00005) 
-parser.add_argument("--dis_lr",     type=float, default = .00001) 
+parser.add_argument("--gen_lr",     type=dict,  default = {
+    (0, int)   : .00003, 
+    (0, float) : .00003, (1, int) : .00003, 
+    (1, float) : .00003, (2, int) : .00003, 
+    (2, float) : .00003, (3, int) : .00003, 
+    (3, float) : .00003, (4, int) : .00003}) 
+parser.add_argument("--dis_lr",     type=dict,  default = {
+    (0, int)   : .00001, 
+    (0, float) : .00001, (1, int) : .00001, 
+    (1, float) : .00001, (2, int) : .00001, 
+    (2, float) : .00001, (3, int) : .00001, 
+    (3, float) : .00001, (4, int) : .00001}) 
 parser.add_argument("--dises",      type=int,   default = 5) 
-parser.add_argument("--freeze",     type=tuple, default = (False, True))
+parser.add_argument("--freeze",     type=tuple, default = (True, True))
 parser.add_argument("--epochs",     type=dict,  default = {
-    (0, int)   : 5000, 
-    (0, float) : 5000, (1, int) : 5000, 
-    (1, float) : 5000, (2, int) : 5000, 
-    (2, float) : 5000, (3, int) : 5000, 
+    (0, int)   : 20000, 
+    (0, float) : 20000, (1, int) : 20000, 
+    (1, float) : 20000, (2, int) : 20000, 
+    (2, float) : 20000, (3, int) : 20000, 
     (3, float) : 0, (4, int) : 0}) 
 parser.add_argument("--batch_sizes",type=dict,  default = {    
     (0, int)   : (64, 64), 
@@ -25,19 +35,19 @@ parser.add_argument("--batch_sizes",type=dict,  default = {
     (2, float) : (64, 64), (3, int) : (64, 64), 
     (3, float) : (64, 64), (4, int) : (64, 64)}) 
 parser.add_argument("--prev_batch", type=tuple, default = (2,)*8)
-parser.add_argument("--mismatch",   type=int,   default = 4)
+parser.add_argument("--mismatch",   type=int,   default = 1)
 
-parser.add_argument("--plotting",   type=int,   default = 100) 
+parser.add_argument("--plotting",   type=int,   default = 500) 
 parser.add_argument("--show_plots", type=int,   default = 10) 
-parser.add_argument("--keep_gen",   type=int,   default = 1000) 
+parser.add_argument("--keep_gen",   type=int,   default = 5000) 
 
-parser.add_argument("--seed_size",  type=int,   default = 128)
-parser.add_argument("--gen_conv",   type=int,   default = 64)  
+parser.add_argument("--seed_size",  type=int,   default = 256)
+parser.add_argument("--gen_conv",   type=int,   default = 128)  
 parser.add_argument("--gen_drop",   type=float, default = .2) 
 parser.add_argument("--gen_noise",  type=float, default = .1) 
 
-parser.add_argument("--stat_size",  type=int,   default = 128)
-parser.add_argument("--dis_conv",   type=int,   default = 64)  
+parser.add_argument("--stat_size",  type=int,   default = 256)
+parser.add_argument("--dis_conv",   type=int,   default = 128)  
 parser.add_argument("--dis_drop",   type=float, default = .2) 
 parser.add_argument("--dis_noise",  type=float, default = .1) 
 
@@ -280,7 +290,7 @@ def make_seeding_vid(betweens = 5, fps = 5):
             ax.title.set_size(5)
             ax.imshow(imshow_shape(im[i]), cmap = cmap)
         for ax in ax_list: ax.axis("off")
-        plt.tight_layout()
+        #plt.tight_layout()
         plt.savefig("output/seed_{}".format(str(i).zfill(10)), dpi=300)
         plt.close() 
         

@@ -14,17 +14,17 @@ from utils import args, device, ConstrainedConv2d, init_weights
     
 def contracter(in_channels, out_channels):
     layer = nn.Sequential(
-        gnn.SelfAttention2d(input_dims = in_channels),
-        #ConstrainedConv2d(
-        #    in_channels  = in_channels, 
-        #    out_channels = out_channels, 
-        #    kernel_size  = 3,
-        #    padding      = 1,
-        #    padding_mode = "reflect"),
-        gnn.ResidualBlock2d(
-            filters = [in_channels, 2*args.gen_conv, out_channels], 
-            kernels = [3, 3],
-            paddings = [1, 1]),
+        #gnn.SelfAttention2d(input_dims = in_channels),
+        ConstrainedConv2d(
+            in_channels  = in_channels, 
+            out_channels = out_channels, 
+            kernel_size  = 3,
+            padding      = 1,
+            padding_mode = "reflect"),
+        #gnn.ResidualBlock2d(
+        #    filters = [in_channels, 2*in_channels, out_channels], 
+        #    kernels = [3, 3],
+        #    paddings = [1, 1]),
         nn.AvgPool2d(
             kernel_size = 2),
         nn.LeakyReLU())
@@ -89,7 +89,8 @@ class Discriminator(nn.Module):
                 kernel_size  = 1),
             nn.LeakyReLU(), 
             nn.Dropout(args.dis_drop),
-            gnn.SelfAttention2d(input_dims = args.dis_conv))
+            #gnn.SelfAttention2d(input_dims = args.dis_conv)
+            )
         
         self.cnn_1 = contracter(args.dis_conv, args.dis_conv)
         self.cnn_2 = contracter(args.dis_conv, args.dis_conv)
@@ -138,9 +139,9 @@ class Discriminator(nn.Module):
         image = image.to(device)
         image = image.permute(0,3,1,2)*2-1
         if(self.training):
-            image += torch.normal(
+            image += args.dis_noise*torch.normal(
                 mean = torch.zeros(image.shape),
-                std  = torch.ones( image.shape)*args.dis_noise).to(device)
+                std  = torch.ones( image.shape)).to(device)
         
         stats = get_stats(image)
         stats = self.stats_in(stats)

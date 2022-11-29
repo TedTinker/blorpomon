@@ -13,17 +13,17 @@ from utils import args, device, ConstrainedConv2d, init_weights
 
 def expander(in_channels, out_channels):
     layer = nn.Sequential(
-        gnn.SelfAttention2d(input_dims = in_channels),
-        #ConstrainedConv2d(
-        #    in_channels  = in_channels, 
-        #    out_channels = out_channels, 
-        #    kernel_size  = 3,
-        #    padding      = 1,
-        #    padding_mode = "reflect"),
-        gnn.ResidualBlock2d(
-            filters = [in_channels, 2*args.gen_conv, out_channels], 
-            kernels = [3, 3],
-            paddings = [1, 1]),
+        #gnn.SelfAttention2d(input_dims = in_channels),
+        ConstrainedConv2d(
+            in_channels  = in_channels, 
+            out_channels = out_channels, 
+            kernel_size  = 3,
+            padding      = 1,
+            padding_mode = "reflect"),
+        #gnn.ResidualBlock2d(
+        #    filters = [in_channels, 2*in_channels, out_channels], 
+        #    kernels = [3, 3],
+        #    paddings = [1, 1]),
         nn.LeakyReLU(),
         nn.Upsample(
             scale_factor = 2, 
@@ -42,9 +42,7 @@ class Generator(nn.Module):
         self.level = 0
         self.color_channels = 1 if args.gray else 3
         
-        self.seed_in_mean = nn.Sequential(
-            nn.Linear(args.seed_size, args.gen_conv * 4 * 4))
-        self.seed_in_std  = nn.Sequential(
+        self.seed_in = nn.Sequential(
             nn.Linear(args.seed_size, args.gen_conv * 4 * 4))
         
         self.cnn_1 = expander(args.gen_conv, args.gen_conv)
@@ -53,15 +51,20 @@ class Generator(nn.Module):
         self.cnn_4 = expander(args.gen_conv, args.gen_conv)
             
         self.image_out = nn.Sequential(
-            gnn.SelfAttention2d(input_dims = args.gen_conv),
+            #gnn.SelfAttention2d(input_dims = args.gen_conv),
+            ConstrainedConv2d(
+                in_channels  = args.gen_conv, 
+                out_channels = args.gen_conv, 
+                kernel_size  = 3,
+                padding      = 1,
+                padding_mode = "reflect"),
             ConstrainedConv2d(
                 in_channels  = args.gen_conv, 
                 out_channels = self.color_channels, 
                 kernel_size  = 1),
             nn.Tanh())
         
-        self.seed_in_mean.apply(    init_weights)
-        self.seed_in_std.apply(     init_weights)
+        self.seed_in.apply(    init_weights)
         self.cnn_1.apply(           init_weights)
         self.cnn_2.apply(           init_weights)
         self.cnn_3.apply(           init_weights)
@@ -100,15 +103,11 @@ class Generator(nn.Module):
     def forward(self, seed):
         cnn_list = [self.cnn_1, self.cnn_2, self.cnn_3, self.cnn_4]
         seed = seed.to(device)
-        x = self.seed_in_mean(seed).reshape(seed.shape[0], args.gen_conv, 4, 4)
+        x = self.seed_in(seed).reshape(seed.shape[0], args.gen_conv, 4, 4)
         if(self.training):
-            std = self.seed_in_std(seed).reshape(seed.shape[0], args.gen_conv, 4, 4)
-            std = torch.log(1 + torch.exp(std)) + 1e-6
-            e = torch.normal(torch.zeros((std.shape)), torch.ones((std.shape))).to(device)
-            x += std*e
-            x += torch.normal(
+            x += args.gen_noise*torch.normal(
                 mean = torch.zeros(x.shape),
-                std  = torch.ones( x.shape)*args.gen_noise).to(device)
+                std  = torch.ones( x.shape)).to(device)
             x = F.dropout(x, args.gen_drop)
         
         if(self.level == 0): 

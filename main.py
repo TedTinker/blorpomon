@@ -101,10 +101,10 @@ def train():
     torch.save(args, "output/args.pt")
     
     gen = Generator()
-    gen_opt = Adam(gen.parameters(), args.gen_lr)
+    gen.summary()
 
     dises = [Discriminator() for d in range(args.dises)]
-    dis_opts = [Adam(dis.parameters(), args.dis_lr) for dis in dises]
+    dises[0].summary()
     
     loss_acc = {
         "change_level"  : [], 
@@ -127,6 +127,9 @@ def train():
         loss_acc["change_level"].append(total_epochs)
         epochs = args.epochs[floor(level), type(level)]
         batch_sizes = args.batch_sizes[floor(level), type(level)]
+        gen_opt = Adam(gen.parameters(), args.gen_lr[floor(level), type(level)])
+        dis_opts = [Adam(dis.parameters(), args.dis_lr[floor(level), type(level)]) for dis in dises]
+
         prev_batches = {i : [] for i, _ in enumerate(args.prev_batch)}
         E = manager.counter(total = epochs, desc = "Level {}:".format(level), unit = "ticks", color = "blue")
         if(type(level)) == int:
