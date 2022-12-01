@@ -14,16 +14,16 @@ from utils import args, device, ConstrainedConv2d, init_weights
 def expander(in_channels, out_channels):
     layer = nn.Sequential(
         #gnn.SelfAttention2d(input_dims = in_channels),
-        ConstrainedConv2d(
-            in_channels  = in_channels, 
-            out_channels = out_channels, 
-            kernel_size  = 3,
-            padding      = 1,
-            padding_mode = "reflect"),
-        #gnn.ResidualBlock2d(
-        #    filters = [in_channels, 2*in_channels, out_channels], 
-        #    kernels = [3, 3],
-        #    paddings = [1, 1]),
+        #ConstrainedConv2d(
+        #    in_channels  = in_channels, 
+        #    out_channels = out_channels, 
+        #    kernel_size  = 3,
+        #    padding      = 1,
+        #    padding_mode = "reflect"),
+        gnn.ResidualBlock2d(
+            filters = [in_channels, 2*in_channels, out_channels], 
+            kernels = [3, 3],
+            paddings = [1, 1]),
         nn.LeakyReLU(),
         nn.Upsample(
             scale_factor = 2, 

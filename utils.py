@@ -88,8 +88,10 @@ from math import floor
 from random import sample
 import cv2
 import numpy as np
+import matplotlib as mpl
 from matplotlib import image
 import matplotlib.pyplot as plt
+mpl.rcParams['agg.path.chunksize'] = 9999999999999999
 
 
 
@@ -237,7 +239,7 @@ def plots(loss_acc, reals, fakes, e, level, size, show):
         ax = fig.add_subplot(gs[pos[0], pos[1]])
         ax.axis("off")
     
-    plt.savefig("output/blorpomon_{}".format(str(e).zfill(10)), dpi=300)
+    plt.savefig("output/blorpomon_{}".format(str(e).zfill(10)), dpi=200)
     if(show): plt.show()
     plt.close()
     
@@ -291,7 +293,7 @@ def make_seeding_vid(betweens = 5, fps = 5):
             ax.imshow(imshow_shape(im[i]), cmap = cmap)
         for ax in ax_list: ax.axis("off")
         #plt.tight_layout()
-        plt.savefig("output/seed_{}".format(str(i).zfill(10)), dpi=300)
+        plt.savefig("output/seed_{}".format(str(i).zfill(10)), dpi=200)
         plt.close() 
         
     files = os.listdir("output")
